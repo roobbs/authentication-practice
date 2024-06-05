@@ -7,6 +7,7 @@ const passport = require("passport");
 const LocalStrategy = require("passport-local").Strategy;
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
+const bcrypt = require("bcryptjs");
 
 const mongoDb =
   "mongodb+srv://roobbs:roobbs1@cluster0.vao1tuo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
@@ -37,7 +38,8 @@ passport.use(
       if (!user) {
         return done(null, false, { message: "Incorrect username" });
       }
-      if (user.password !== password) {
+      const match = await bcrypt.compare(password, user.password);
+      if (!match) {
         return done(null, false, { message: "Incorrect password" });
       }
       return done(null, user);
@@ -59,6 +61,12 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
+//TO ACCES USER EVERYWHERE
+// app.use((req, res, next) => {
+//   res.locals.currentUser = req.user;
+//   next();
+// });
+
 app.get("/", (req, res) => {
   res.render("index", { user: req.user });
 });
@@ -66,11 +74,20 @@ app.get("/", (req, res) => {
 app.get("/sign-up", (req, res) => res.render("sign-up-form"));
 app.post("/sign-up", async (req, res, next) => {
   try {
-    const user = new User({
-      username: req.body.username,
-      password: req.body.password,
+    bcrypt.hash(req.body.password, 10, async (err, hashedPassword) => {
+      // if err, do something
+      if (err) {
+        console.log(err);
+        res.redirect("/");
+      }
+      // otherwise, store hashedPassword in DB
+      const user = new User({
+        username: req.body.username,
+        password: hashedPassword,
+      });
+      const result = await user.save();
     });
-    const result = await user.save();
+
     res.redirect("/");
   } catch (err) {
     return next(err);
@@ -83,5 +100,13 @@ app.post(
     failureRedirect: "/",
   })
 );
+app.get("/log-out", (req, res, next) => {
+  req.logout((err) => {
+    if (err) {
+      return next(err);
+    }
+    res.redirect("/");
+  });
+});
 
 app.listen(3000, () => console.log("app listening on port 3000!"));
